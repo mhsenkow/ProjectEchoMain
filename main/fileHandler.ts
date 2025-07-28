@@ -2,6 +2,10 @@ import { ipcMain } from 'electron';
 import { readFile, readdir, stat } from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface FileContext {
   path: string;
@@ -37,14 +41,29 @@ async function readFileContext(filePath: string): Promise<FileContext> {
     if (ext === '.pdf') {
       // For PDFs, use Python script with PyPDF2 for text extraction
       try {
-        const scriptPath = path.join(process.cwd(), 'scripts', 'pdf_extractor.py');
+        // Try multiple possible script locations
+        const possibleScriptPaths = [
+          path.join(__dirname, '..', 'scripts', 'pdf_extractor.py'),
+          path.join(process.cwd(), 'scripts', 'pdf_extractor.py'),
+          path.join(process.cwd(), 'echo-frame', 'scripts', 'pdf_extractor.py')
+        ];
         
-        // Check if script exists
-        try {
-          await stat(scriptPath);
-        } catch (scriptError) {
-          throw new Error(`PDF extraction script not found at: ${scriptPath}`);
+        let scriptPath = null;
+        for (const possiblePath of possibleScriptPaths) {
+          try {
+            await stat(possiblePath);
+            scriptPath = possiblePath;
+            break;
+          } catch (e) {
+            // Continue to next path
+          }
         }
+        
+        if (!scriptPath) {
+          throw new Error(`PDF extraction script not found. Tried: ${possibleScriptPaths.join(', ')}`);
+        }
+        
+
         
         return new Promise<FileContext>((resolve, reject) => {
           const pythonProcess = spawn('python3', [scriptPath, absolutePath]);

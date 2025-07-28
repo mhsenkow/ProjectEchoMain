@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
-import { readFolderContext, getFolderSummary, FolderContext } from '../../engine/fileContext';
+
+export interface FileContext {
+  path: string;
+  content: string;
+  type: string;
+  size: number;
+  lastModified: Date;
+}
+
+export interface FolderContext {
+  path: string;
+  files: FileContext[];
+  totalSize: number;
+  fileCount: number;
+}
 
 // Function to read a single file
 async function readFileContext(filePath: string): Promise<FolderContext> {
@@ -22,6 +36,44 @@ async function readFileContext(filePath: string): Promise<FolderContext> {
     console.error('[RENDERER] Error reading file context:', error);
     throw error;
   }
+}
+
+// Function to read a folder
+async function readFolderContext(folderPath: string, maxFiles: number = 50): Promise<FolderContext> {
+  try {
+    console.log('[RENDERER] Attempting to read folder:', folderPath);
+    console.log('[RENDERER] electronAPI available:', !!(window as any).electronAPI);
+    
+    const result = await (window as any).electronAPI?.invoke('read-folder-context', folderPath, maxFiles);
+    
+    console.log('[RENDERER] IPC result:', result);
+    
+    if (result?.success) {
+      console.log('[RENDERER] Folder read successfully, files count:', result.data.files?.length);
+      return result.data;
+    } else {
+      console.error('[RENDERER] IPC returned error:', result?.error);
+      throw new Error(result?.error || 'Failed to read folder');
+    }
+  } catch (error) {
+    console.error('[RENDERER] Error reading folder context:', error);
+    throw error;
+  }
+}
+
+// Function to get folder summary
+function getFolderSummary(folderContext: FolderContext): string {
+  const fileTypes = folderContext.files.reduce((acc, file) => {
+    acc[file.type] = (acc[file.type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  
+  let summary = `Folder: ${folderContext.path}\n`;
+  summary += `Files: ${folderContext.fileCount}\n`;
+  summary += `Size: ${(folderContext.totalSize / 1024).toFixed(2)} KB\n`;
+  summary += `File types: ${Object.entries(fileTypes).map(([type, count]) => `${type}(${count})`).join(', ')}\n`;
+  
+  return summary;
 }
 
 interface FileContextSelectorProps {
@@ -182,7 +234,7 @@ export function FileContextSelector({ onContextChange, currentContext }: FileCon
             <button
               onClick={() => {
                 setMode('folder');
-                setSelectedPath(process.cwd());
+                setSelectedPath('/Users/powerox/projectEcho/echo-frame');
               }}
               className="bg-white/10 backdrop-blur-xl text-white px-4 py-2 rounded-xl hover:bg-white/20 border border-white/20 text-sm transition-all text-left"
             >
